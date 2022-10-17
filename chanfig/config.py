@@ -8,17 +8,13 @@ from collections.abc import Mapping
 from contextlib import contextmanager
 from copy import deepcopy
 from functools import wraps
-from json import dump as json_dump
-from json import dumps as json_dumps
-from json import load as json_load
+from json import dump as json_dump, dumps as json_dumps, load as json_load, loads as json_loads
 from os import PathLike
 from os.path import splitext
 from typing import IO, Any, Callable, Iterable, Mapping, Optional, Union
 from warnings import warn
 
-from yaml import SafeDumper, SafeLoader
-from yaml import dump as yaml_dump
-from yaml import load as yaml_load
+from yaml import SafeDumper, SafeLoader, dump as yaml_dump, load as yaml_load
 
 PathStr = Union[PathLike, str]
 File = Union[PathStr, IO]
@@ -216,7 +212,7 @@ class NestedDict(Mapping):
     _storage: Dict
 
     def __init__(self, *args, **kwargs):
-        super().__setattr__("_storage", OrderedDict())
+        super().__setattr__("_storage", Dict())
         for key, value in args:
             self.set(key, value, convert_mapping=True)
         for key, value in kwargs.items():
@@ -450,7 +446,7 @@ class NestedDict(Mapping):
             kwargs["Dumper"] = Dumper
         if "indent" not in kwargs:
             kwargs["indent"] = self._indent
-        return yaml_dump(self.dict(dict), *args, **kwargs)
+        return yaml_dump(json_loads(self.jsons()), *args, **kwargs)
 
     @classmethod
     def from_yaml(cls, string: str, **kwargs) -> NestedDict:
