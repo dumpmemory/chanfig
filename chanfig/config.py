@@ -85,6 +85,126 @@ class ConfigParser(ArgumentParser):
     parse_config = parse
 
 
+class Dict(OrderedDict):
+    """
+    Default OrderedDict with attributes
+    """
+
+    def __init__(self, *args, default_factory=None, **kwargs):
+        if (default_factory is not None and not isinstance(default_factory, Callable)):
+            raise TypeError('default_factory of Dict must be callable')
+        self.__dict__['default_factory'] = default_factory
+        for key, value in args:
+            self.set(key, value)
+        for key, value in kwargs.items():
+            self.set(key, value)
+
+    def get(self, name: str, default: Optional[Any] = None) -> Any:
+        try:
+            return super().__getitem__(name)
+        except AttributeError:
+            return self.__missing__(name, default)
+
+    __getitem__ = get
+    __getattr__ = get
+
+    def set(self, name: str, value: Any) -> None:
+        if isinstance(value, str):
+            try:
+                value = literal_eval(value)
+            except (ValueError, SyntaxError):
+                pass
+        super().__setitem__(name, value)
+
+    __setitem__ = set
+    __setattr__ = set
+
+    def remove(self, name: str) -> None:
+        del self[name]
+
+    __delitem__ = remove
+    __delattr__ = remove
+
+    def __missing__(self, name: str, default: Optional[Any] = None) -> Any:
+        if default is None:
+            if self.__dict__['default_factory'] is None:
+                raise AttributeError(name)
+            default = self.__dict__['default_factory']()
+        self[name] = default
+        return self[name]
+
+    def update(self, other: Union[Mapping, Iterable], **kwargs) -> Dict:
+        if isinstance(other, (Mapping,)):
+            for key, value in other.items():
+                if isinstance(value, (Mapping,)) and isinstance(self[key], (Mapping,)):
+                    self[key].update(value)
+                else:
+                    self[key] = value
+        elif isinstance(other, Iterable):
+            for key, value in other:
+                self[key] = value
+        for key, value in kwargs.items():
+            self[key] = value
+        return self
+
+    merge = update
+    union = update
+
+    def difference(self, other: Union[File, Mapping, Iterable]) -> Dict:
+        if isinstance(other, (PathLike, str, IO)):
+            other = self.load(other)
+        if isinstance(other, (Mapping,)):
+            return type(self)(
+                **{
+                    key: value
+                    for key, value in other.items()
+                    if key not in self or self[key] != value
+                }
+            )
+        elif isinstance(other, Iterable):
+            return type(self)(
+                **{
+                    key: value
+                    for key, value in other
+                    if key not in self or self[key] != value
+                }
+            )
+        return None
+
+    diff = difference
+
+    def intersection(self, other: Union[Mapping, Iterable]) -> Mapping:
+        if isinstance(other, (Mapping,)):
+            return type(self)(
+                **{
+                    key: value
+                    for key, value in other.items()
+                    if key in self and self[key] == value
+                }
+            )
+        elif isinstance(other, Iterable):
+            return type(self)(
+                **{
+                    key: value
+                    for key, value in other
+                    if key in self and self[key] == value
+                }
+            )
+        return None
+
+    def copy(self) -> Dict:
+        return type(self)(**self)
+
+    __copy__ = copy
+
+    def deepcopy(self, memo=None) -> Dict:
+        return type(self)(**{k: deepcopy(v) for k, v in self.items()})
+
+    __deepcopy__ = deepcopy
+
+    clone = deepcopy
+
+
 class NestedDict(Mapping):
     """
     Nested Dict
@@ -93,7 +213,7 @@ class NestedDict(Mapping):
     _delimiter: str = "."
     _indent: int = 2
     _convert_mapping: bool = False
-    _storage: OrderedDict
+    _storage: Dict
 
     def __init__(self, *args, **kwargs):
         super().__setattr__("_storage", OrderedDict())
